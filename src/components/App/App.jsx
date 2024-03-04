@@ -1,68 +1,97 @@
-import { nanoid } from 'nanoid';
-import { useState, useEffect } from 'react';
-import ContactForm from '../ContactForm/ContactForm';
-import SearchBox from '../SearchBox/SearchBox';
-import ContactList from '../ContactList/ContactList';
-import css from './App.module.css';
+import { useEffect, useState } from 'react';
+import { fetchPhotos } from '../../image-api';
+import ImageGallery from '../ImageGallery/ImageGallery';
+import SearchBar from '../SearchBar/SearchBar';
+import LoadMoreBtn from '../LoadMoreBtn/LoadMoreBtn';
+import ErrorMessage from '../ErrorMessage/ErrorMessage';
+import Loader from '../Loader/Loader';
+import ImageModal from '../ImageModal/ImageModal';
+import toast, { Toaster } from 'react-hot-toast';
 
-const data = [
-  { id: 'id-1', name: 'Rosie Simpson', number: '459-12-56' },
-  { id: 'id-2', name: 'Hermione Kline', number: '443-89-12' },
-  { id: 'id-3', name: 'Eden Clements', number: '645-17-79' },
-  { id: 'id-4', name: 'Annie Copeland', number: '227-91-26' },
-];
-
-const initialValues = {
-  id: '',
-  name: '',
-  number: '',
-};
-
-export default function App() {
-  const [values, setValues] = useState(() => {
-    const saveStorage = localStorage.getItem('localData');
-    return saveStorage ? JSON.parse(saveStorage) : data;
-  });
-  const [searchValue, setSearchValue] = useState('');
-
-  const handleSubmit = (value, actions) => {
-    setValues([...values, { ...value, id: nanoid() }]);
-    actions.resetForm();
-  };
+function App() {
+  const [photos, setPhotos] = useState([]);
+  const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState(false);
+  const [loader, setLoader] = useState(false);
+  const [visibleBtn, setVisibleBtn] = useState(false);
+  const [modalIsOpen, setModalIsOpen] = useState(false);
+  const [modalData, setModalData] = useState({});
 
   useEffect(() => {
-    values !== data
-      ? localStorage.setItem('localData', JSON.stringify(values))
-      : '';
-  }, [values]);
+    async function getPhotos() {
+      if (query === '') return;
 
-  const handlerDelete = idToDelete => {
-    setValues(values.filter(value => value.id !== idToDelete));
+      try {
+        setError(false);
+        setVisibleBtn(false);
+        setLoader(true);
+
+        const data = await fetchPhotos(query, page);
+
+        setPhotos(prevPhotos => {
+          return [...prevPhotos, ...data.data.results];
+        });
+
+        const totalPages = data.data.total_pages;
+        if (totalPages > page) {
+          setVisibleBtn(true);
+          toast.success('Success');
+        } else {
+          toast('No pictures for your request');
+        }
+      } catch (e) {
+        setError(true);
+      } finally {
+        setLoader(false);
+      }
+    }
+    getPhotos();
+  }, [query, page]);
+
+  const handleSearch = newQuery => {
+    if (newQuery === '') {
+      toast.error('Please, enter something');
+      return;
+    }
+    setPhotos([]);
+    setPage(1);
+    setQuery(newQuery);
   };
 
-  useEffect(() => {
-    values !== data && values.length !== 0
-      ? localStorage.setItem('localData', JSON.stringify(values))
-      : '';
-  }, [values]);
-
-  const handleSearch = event => {
-    setSearchValue(event.target.value);
+  const handelMore = () => {
+    setPage(page + 1);
   };
 
-  const Filtered =
-    searchValue.trim() !== ''
-      ? values.filter(value =>
-          value.name.toLowerCase().includes(searchValue.toLowerCase().trim())
-        )
-      : values;
+  const modalToggle = () => {
+    setModalIsOpen(!modalIsOpen);
+  };
+
+  const openModal = id => {
+    const photoForModal = photos.find(photo => photo.id === id);
+    setModalData({
+      image: photoForModal.urls.regular,
+      description: photoForModal.alt_description,
+    });
+
+    modalToggle();
+  };
 
   return (
-    <div className={css.wrapper}>
-      <h1>Phonebook</h1>
-      <ContactForm initialValues={initialValues} onAdd={handleSubmit} />
-      <SearchBox inputValue={searchValue} onChange={handleSearch} />
-      <ContactList contacts={Filtered} onDelete={handlerDelete} />
-    </div>
+    <>
+      <SearchBar onSubmit={handleSearch} />
+
+      {photos.length != 0 && (
+        <ImageGallery photos={photos} openModal={openModal} />
+      )}
+      {visibleBtn && <LoadMoreBtn onLoad={handelMore} />}
+
+      {error && <ErrorMessage />}
+      {loader && <Loader />}
+      <ImageModal isOpen={modalIsOpen} toggle={modalToggle} data={modalData} />
+      <Toaster position="top-right" />
+    </>
   );
 }
+
+export default App;
