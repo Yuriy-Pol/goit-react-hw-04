@@ -60,7 +60,7 @@ function App() {
   };
 
   const handelMore = () => {
-    setPage(page + 1);
+    setPage(prevPage => prevPage + 1);
   };
 
   const modalToggle = () => {
